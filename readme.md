@@ -46,6 +46,16 @@ $highlighter = \A17\PhpTorch\Highlight::new('PageController.php')
 If you want to use this in Jigsaw, you should require `"torchlight/torchlight-jigsaw": "^0.3.4",` in addition to this
 package.
 
+Then you can start a code snippet with 3 backticks followed by phptorch like this:
+
+```
+\```phptorch
+{ JSON }
+##CODE##
+<?php ...
+\```
+```
+
 Linked file:
 
 ```phptorch
