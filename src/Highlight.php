@@ -170,7 +170,7 @@ class Highlight
             $end++;
         }
 
-        $this->diffInMethod[] = [
+        $this->diffInMethod[$method] = [
             'type' => $addRemove,
             'start' => $start,
             'end' => $end,
