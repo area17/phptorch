@@ -1,9 +1,7 @@
 # PhpTorch
 
-PhpTorch is a package for documentation purposes. It uses [nette/php-generator](https://github.com/nette/php-generator)
+PhpTorch is a package for documentation purposes. It uses [nikic/php-parser](https://github.com/nikic/PHP-Parser)
 to parse a php class, which can then be modified using highlighting actions.
-
-(Currently requires this patch: https://github.com/nette/php-generator/pull/121)
 
 The end result will be printed as code with [torchlight](https://torchlight.dev) annotations.
 
@@ -23,7 +21,7 @@ Then you can provide the output to torchlight which will result in:
 
 ## Available methods
 
-For now check [the highlighter class public methods](./src/Highlight.php)
+For now check [the highlighter class public methods](./src/Highlight.php) or consult the tests.
 
 ## Todo
 

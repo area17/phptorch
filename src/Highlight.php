@@ -3,23 +3,19 @@
 namespace A17\PhpTorch;
 
 use Closure;
-use Illuminate\Support\Str;
-use Nette\PhpGenerator\ClassType;
-use Nette\PhpGenerator\PhpFile;
 
 /**
  * @todo: This currently only works for classes.
  */
 class Highlight
 {
-    private PhpFile $file;
-    private ClassType $class;
+    private DocParser $parsed;
 
     private const TYPE_FOCUS = 'focus';
     private const TYPE_HIGHLIGHT = 'highlight';
     private const TYPE_COLLAPSE = 'collapse';
-    private const TYPE_DIFF_ADD = 'add';
-    private const TYPE_DIFF_REMOVE = 'remove';
+    public const TYPE_DIFF_ADD = 'add';
+    public const TYPE_DIFF_REMOVE = 'remove';
 
     private array $methodActions = [];
     private array $propertyActions = [];
@@ -46,11 +42,7 @@ class Highlight
             $code = file_get_contents($classFile);
         }
 
-        $this->file = PhpFile::fromCode($code);
-
-        if ($this->file->getClasses()) {
-            $this->class = $this->file->getClasses()[array_key_first($this->file->getClasses())];
-        }
+        $this->parsed = DocParser::forContent($code);
     }
 
     public function collapseAll(): self
@@ -65,14 +57,35 @@ class Highlight
 
     public function diffImports(array|string|null $imports = null, string $addRemove = self::TYPE_DIFF_ADD): self
     {
-        $this->handleFile($imports, 'uses', $addRemove);
+        $this->handleClass($imports, 'allUses', 'uses', $addRemove);
 
         return $this;
     }
 
     public function focusImports(array|string|null $imports = null): self
     {
-        $this->handleFile($imports, 'uses', self::TYPE_FOCUS);
+        $this->handleClass($imports, 'allUses', 'uses', self::TYPE_FOCUS);
+
+        return $this;
+    }
+
+    public function highlightImports(array|string|null $imports = null): self
+    {
+        $this->handleClass($imports, 'allUses', 'uses', self::TYPE_HIGHLIGHT);
+
+        return $this;
+    }
+
+    public function highlightTraits(array|string|null $traits = null): self
+    {
+        $this->handleClass($traits, 'getTraits', 'traitActions', self::TYPE_HIGHLIGHT);
+
+        return $this;
+    }
+
+    public function focusTraits(array|string|null $traits = null): self
+    {
+        $this->handleClass($traits, 'getTraits', 'traitActions', self::TYPE_FOCUS);
 
         return $this;
     }
@@ -86,13 +99,15 @@ class Highlight
 
     public function collapseAllTraits(): self
     {
-        $traits = $this->class->getTraits();
+        $traits = $this->parsed->getTraits();
 
         $traitCount = count($traits);
         if ($traitCount > 0) {
             $firstTrait = $traits[array_key_first($traits)]->getName();
+            $lastTrait = $traits[array_key_last($traits)]->getName();
 
-            $this->traitActions[$firstTrait] = ['collapse:' . $traitCount];
+            $this->traitActions[$firstTrait] = ['collapse:start'];
+            $this->traitActions[$lastTrait] = ['collapse:end'];
         }
 
         return $this;
@@ -125,13 +140,25 @@ class Highlight
         return $this;
     }
 
-    public function focusProperties(array|string|null $properties = null, bool $highlight = false): self
+    public function focusProperties(array|string|null $properties = null): self
     {
         $this->handleClass(
             $properties,
             'getProperties',
             'propertyActions',
-            $highlight ? self::TYPE_HIGHLIGHT : self::TYPE_FOCUS
+            self::TYPE_FOCUS
+        );
+
+        return $this;
+    }
+
+    public function highlightProperties(array|string|null $properties = null): self
+    {
+        $this->handleClass(
+            $properties,
+            'getProperties',
+            'propertyActions',
+            self::TYPE_HIGHLIGHT
         );
 
         return $this;
@@ -151,47 +178,48 @@ class Highlight
         return $this;
     }
 
-    public function focusMethods(array|string|null $methods = null, bool $highlight = false): self
+    public function focusMethods(array|string|null $methods = null): self
     {
         $this->handleClass(
             $methods,
             'getMethods',
             'methodActions',
-            $highlight ? self::TYPE_HIGHLIGHT : self::TYPE_FOCUS
+            self::TYPE_FOCUS
         );
+
+        return $this;
+    }
+
+    public function highlightMethods(array|string|null $methods = null): self
+    {
+        $this->handleClass(
+            $methods,
+            'getMethods',
+            'methodActions',
+            self::TYPE_HIGHLIGHT
+        );
+
+        return $this;
+    }
+
+    public function focusInMethod(string $method, int $start, int $end): self
+    {
+        $this->diffInMethod[$method] = [
+            'type' => self::TYPE_FOCUS,
+            'start' => $start,
+            'end' => $end,
+        ];
 
         return $this;
     }
 
     public function diffInMethod(string $method, int $start, int $end, string $addRemove = self::TYPE_DIFF_ADD): self
     {
-        if ($start === 0) {
-            $start = 1;
-            $end++;
-        }
-
         $this->diffInMethod[$method] = [
             'type' => $addRemove,
             'start' => $start,
             'end' => $end,
         ];
-
-        $body = $this->class->getMethod($method)->getBody();
-
-        $bodyArray = explode(PHP_EOL, $body);
-
-        if ($end > count($bodyArray)) {
-            $end = count($bodyArray);
-        }
-
-        if ($start - $end === 0) {
-            $bodyArray[$start - 1] .= '// ' . $this->getSingleComment([$addRemove]);
-        } else {
-            $bodyArray[$start - 1] .= '//' . $this->buildStartComment([$addRemove]);
-            $bodyArray[$end - 1] .= '//' . $this->buildEndComment([$addRemove]);
-        }
-
-        $this->class->getMethod($method)->setBody(implode(PHP_EOL, $bodyArray));
 
         return $this;
     }
@@ -207,42 +235,32 @@ class Highlight
         return $this;
     }
 
-    public function manipulateClass(\Closure $manipulation): self
-    {
-        $manipulation($this->class);
-
-        return $this;
-    }
-
-    private function handleFile(array|string|null $list, string $target, string $action): void
-    {
-        foreach ($this->getList($list) as $item) {
-            $this->{$target}[$item][] = $action;
-        }
-    }
-
     private function handleClass(array|string|null $list, string $getter, string $target, string $action): void
     {
         foreach (
             $this->getList($list, function () use ($getter) {
-                return $this->getNames($this->class->{$getter}());
+                return $this->getNames($getter);
             }) as $item
         ) {
             $this->{$target}[$item][] = $action;
         }
     }
 
-    private function getNames(array $nameAwares): array
+    private function getNames(string $getter): array
     {
-        $names = [];
+        $items = match ($getter) {
+            'allUses' => $this->parsed->getUseStatements(),
+            'getTraits' => $this->parsed->getTraits(),
+            'getMethods' => $this->parsed->getMethods(),
+            'getProperties' => $this->parsed->getProperties(),
+        };
 
-        /** @var \Nette\PhpGenerator\Traits\NameAware $nameAware */
-        foreach ($nameAwares as $nameAware) {
-            $name = $nameAware->getName();
-            $names[$name] = $name;
+        $list = [];
+        foreach ($items as $item) {
+            $list[] = $item->getName();
         }
 
-        return $names;
+        return $list;
     }
 
     private function getList(array|string|null $list = null, ?Closure $all = null): array
@@ -258,44 +276,154 @@ class Highlight
         return $list;
     }
 
-    private function wrapMethods(array $methods): void
+    private function handleMethodBodyDiff(string $code): string
     {
-        foreach ($methods as $method => $actions) {
-            $actions = $this->removeCollapseIfMultiple($actions);
+        foreach ($this->diffInMethod as $methodName => $options) {
+            foreach ($this->parsed->getMethods() as $method) {
+                if ($method->getName() === $methodName) {
+                    if ($method->isSingleLine()) {
+                        $code = $this->suffixLine(
+                            $method->getStartLine(),
+                            $this->getSingleComment($options['type']),
+                            $code,
+                            true
+                        );
+                    } else {
+                        $start = $method->getStartLine() + $options['start'];
+                        $end = $method->getStartLine() + $options['end'];
 
-            $this->class->getMethod($method)->setPrefixComment($this->buildStartComment($actions), true);
-            $this->class->getMethod($method)->setSuffixComment($this->buildEndComment($actions), true);
-        }
-    }
-
-    private function wrapProperties(array $methods): void
-    {
-        foreach ($methods as $method => $actions) {
-            $actions = $this->removeCollapseIfMultiple($actions);
-
-            $value = $this->class->getProperty($method)->getValue();
-
-            if (Str::contains($value, "\n")) {
-                $this->class->getProperty($method)->setPrefixComment($this->buildStartComment($actions), true);
-                $this->class->getProperty($method)->setSuffixComment($this->buildEndComment($actions), true);
-            } else {
-                $this->class->getProperty($method)->setPrefixComment($this->getSingleComment($actions), true);
+                        $code = $this->suffixLine(
+                            $start,
+                            $this->buildStartComment([$options['type']]),
+                            $code,
+                            true
+                        );
+                        $code = $this->suffixLine(
+                            $end,
+                            $this->buildEndComment([$options['type']]),
+                            $code,
+                            true
+                        );
+                    }
+                }
             }
         }
+
+        return $code;
     }
 
-    private function suffixTraits(array $traitsToProcess): void
+    private function wrapMethods(string $code): string
     {
-        $newTraits = [];
+        foreach ($this->methodActions as $methodName => $actions) {
+            $actions = $this->removeCollapseIfMultiple($actions);
 
-        foreach ($this->class->getTraits() as $trait) {
-            if (isset($traitsToProcess[$trait->getName()])) {
-                $trait->setSuffixComment($this->getSingleComment($traitsToProcess[$trait->getName()]), true);
+            foreach ($this->parsed->getMethods() as $method) {
+                if ($method->getName() === $methodName) {
+                    if ($method->isSingleLine()) {
+                        $code = $this->suffixLine(
+                            $method->getStartLine(),
+                            $this->getSingleComment($actions),
+                            $code,
+                            true
+                        );
+                    } else {
+                        $code = $this->suffixLine(
+                            $method->getStartLine(),
+                            $this->buildStartComment($actions),
+                            $code,
+                            true
+                        );
+                        $code = $this->suffixLine(
+                            $method->getEndLine(),
+                            $this->buildEndComment($actions),
+                            $code,
+                            true
+                        );
+                    }
+                }
             }
-            $newTraits[] = $trait;
         }
 
-        $this->class->setTraits($newTraits);
+        return $code;
+    }
+
+    private function wrapProperties(string $code): string
+    {
+        foreach ($this->propertyActions as $propertyName => $actions) {
+            $actions = $this->removeCollapseIfMultiple($actions);
+
+            foreach ($this->parsed->getProperties() as $method) {
+                if ($method->getName() === $propertyName) {
+                    if ($method->isSingleLine()) {
+                        $code = $this->suffixLine(
+                            $method->getStartLine(),
+                            $this->getSingleComment($actions),
+                            $code,
+                            true
+                        );
+                    } else {
+                        $code = $this->suffixLine(
+                            $method->getStartLine(),
+                            $this->buildStartComment($actions),
+                            $code,
+                            true
+                        );
+                        $code = $this->suffixLine(
+                            $method->getEndLine(),
+                            $this->buildEndComment($actions),
+                            $code,
+                            true
+                        );
+                    }
+                }
+            }
+        }
+
+        return $code;
+    }
+
+    private function suffixTraits(string $code): string
+    {
+        foreach ($this->traitActions as $name => $actions) {
+            foreach ($this->parsed->getTraits() as $trait) {
+                if ($trait->matches($name)) {
+                    $code = $this->suffixLine(
+                        $trait->getStartLine(),
+                        $this->getSingleComment($actions),
+                        $code,
+                        true
+                    );
+                }
+            }
+        }
+
+        return $code;
+    }
+
+    public function suffixUses(string $code): string
+    {
+        if ($this->uses !== []) {
+            foreach ($this->uses as $name => $use) {
+                foreach ($this->parsed->getUseStatements() as $useStatement) {
+                    if ($useStatement->matches($name)) {
+                        $code = $this->suffixLine(
+                            $useStatement->getStartLine(),
+                            $this->getSingleComment($use),
+                            $code,
+                            true
+                        );
+                    }
+                }
+            }
+        } elseif ($this->collapseImports) {
+            $first = $this->parsed->getUseStatements()[0];
+            $last = $this->parsed->getUseStatements()[count($this->parsed->getUseStatements()) - 1];
+
+            $code = $this->suffixLine($first->getStartLine(), '[tl! collapse:start]', $code, true);
+            $code = $this->suffixLine($last->getEndLine(), '[tl! collapse:end]', $code, true);
+        }
+
+        return $code;
     }
 
     private function removeCollapseIfMultiple(array $actions): array
@@ -341,11 +469,14 @@ class Highlight
         return $comment;
     }
 
-    public function process(): void
+    public function process(string $code): string
     {
-        $this->wrapMethods($this->methodActions);
-        $this->wrapProperties($this->propertyActions);
-        $this->suffixTraits($this->traitActions);
+        $code = $this->suffixUses($code);
+        $code = $this->suffixTraits($code);
+        $code = $this->wrapMethods($code);
+        $code = $this->wrapProperties($code);
+        $code = $this->handleMethodBodyDiff($code);
+        return $code;
     }
 
     public function copy(): self
@@ -355,26 +486,16 @@ class Highlight
 
     public function __toString(): string
     {
-        $this->process();
-        $file = (string)$this->file;
+        $code = $this->parsed->getCode();
 
-        foreach ($this->uses as $name => $use) {
-            $comment = $this->getSingleComment($use);
-            $file = str_replace($name . ';', $name . '; //' . $comment, $file);
-        }
+        return $this->process($code);
+    }
 
-        if ($this->uses === [] && $this->collapseImports) {
-            $beforeClass = Str::before($file, '{');
-            $matches = [];
-            preg_match_all('/use (.*)\n/', $beforeClass, $matches);
+    private function suffixLine(int $line, string $content, string $code, bool $withCommentString = false): string
+    {
+        $exploded = explode(PHP_EOL, $code);
+        $exploded[$line - 1] .= ($withCommentString ? '//' : '') . $content;
 
-            $amount = count($matches[1]);
-
-            $first = reset($matches[1]);
-
-            $file = Str::replaceFirst($first, $first . '// [tl! collapse:' . $amount . ']', $file);
-        }
-
-        return $file;
+        return implode(PHP_EOL, $exploded);
     }
 }

@@ -8,6 +8,11 @@
       "A17\\PhpTorch\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "A17\\PhpTorch\\Tests\\": "tests/"
+    }
+  },
   "authors": [
     {
       "name": "Harings Rob",
@@ -16,7 +21,9 @@
   ],
   "require": {
     "php": "^8.0",
-    "nette/php-generator": "^4.0",
     "nikic/php-parser": "^4.15"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9"
   }
 }
