@@ -1,4 +1,4 @@
-# PhpTorch
+# PhpTorch 🔦
 
 PhpTorch is a package for documentation purposes. It uses [nikic/php-parser](https://github.com/nikic/PHP-Parser)
 to parse a php class, which can then be modified using highlighting actions.
