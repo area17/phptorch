@@ -416,11 +416,13 @@ class Highlight
                 }
             }
         } elseif ($this->collapseImports) {
-            $first = $this->parsed->getUseStatements()[0];
-            $last = $this->parsed->getUseStatements()[count($this->parsed->getUseStatements()) - 1];
+            if ($this->parsed->getUseStatements() !== []) {
+                $first = $this->parsed->getUseStatements()[0];
+                $last = $this->parsed->getUseStatements()[count($this->parsed->getUseStatements()) - 1];
 
-            $code = $this->suffixLine($first->getStartLine(), '[tl! collapse:start]', $code, true);
-            $code = $this->suffixLine($last->getEndLine(), '[tl! collapse:end]', $code, true);
+                $code = $this->suffixLine($first->getStartLine(), '[tl! collapse:start]', $code, true);
+                $code = $this->suffixLine($last->getEndLine(), '[tl! collapse:end]', $code, true);
+            }
         }
 
         return $code;
