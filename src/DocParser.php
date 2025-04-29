@@ -36,7 +36,7 @@ class DocParser
     private function parsed(): array
     {
         if ($this->ast === null) {
-            $parser = (new ParserFactory)->create(ParserFactory::PREFER_PHP7);
+            $parser = (new ParserFactory)->createForHostVersion();
             $this->ast = $parser->parse($this->getCode());
         }
 

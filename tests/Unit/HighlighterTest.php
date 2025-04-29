@@ -3,6 +3,7 @@
 namespace A17\PhpTorch\Tests\Unit;
 
 use A17\PhpTorch\Highlight;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class HighlighterTest extends TestCase
@@ -43,9 +44,7 @@ php;
         $this->assertEquals($this->class, $outcome);
     }
 
-    /**
-     * @dataProvider getPropertyCompatibleStatements
-     */
+    #[DataProvider('getPropertyCompatibleStatements')]
     public function testHighlightPropertiesStatements(string $method, string $string): void
     {
         $outcome = (string)$this->getFresh()->$method('fillable');
@@ -71,9 +70,7 @@ php;
         $this->assertStringContainsString('public $timestamps = false;//[tl! ' . $string . ']', $outcome);
     }
 
-    /**
-     * @dataProvider getMethodCompatibleStatements
-     */
+    #[DataProvider('getMethodCompatibleStatements')]
     public function testHighlightMethodStatements(string $method, string $string): void
     {
         $outcome = (string)$this->getFresh()->$method('save');
@@ -104,9 +101,7 @@ php;
             $outcome);
     }
 
-    /**
-     * @dataProvider getTraitCompatibleStatements
-     */
+    #[DataProvider('getTraitCompatibleStatements')]
     public function testHighlightTraitStatements(string $method, string $string): void
     {
         $outcome = (string)$this->getFresh()->$method('App\Models\CachableTrait');
@@ -132,9 +127,7 @@ php;
         $this->assertStringContainsString('use PackageCachableTrait;//[tl! collapse:end]', $outcome);
     }
 
-    /**
-     * @dataProvider getUseCompatibleStatements
-     */
+    #[DataProvider('getUseCompatibleStatements')]
     public function testHighlightUseStatements(string $method, string $string): void
     {
         $outcome = (string)$this->getFresh()->$method('App\Models\SomeOtherModel');
@@ -265,7 +258,7 @@ php,
         return Highlight::fromCode($this->class);
     }
 
-    public function getUseCompatibleStatements(): array
+    public static function getUseCompatibleStatements(): array
     {
         return [
             'focus' => [
@@ -283,7 +276,7 @@ php,
         ];
     }
 
-    public function getTraitCompatibleStatements(): array
+    public static function getTraitCompatibleStatements(): array
     {
         return [
             'focus' => [
@@ -301,7 +294,7 @@ php,
         ];
     }
 
-    public function getMethodCompatibleStatements(): array
+    public static function getMethodCompatibleStatements(): array
     {
         return [
             'focus' => [
@@ -323,7 +316,7 @@ php,
         ];
     }
 
-    public function getPropertyCompatibleStatements(): array
+    public static function getPropertyCompatibleStatements(): array
     {
         return [
             'focus' => [
